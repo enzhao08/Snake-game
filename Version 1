@@ -1,0 +1,239 @@
+/**
+* \page Général 
+* \brief Programme pour jouer au jeu snake dans le terminal
+* \author ANNIC Enzo
+* \version 1.0
+* \date 27 octobre 2024
+*
+*
+**/
+
+/**********************************************************/
+/*            Déclarations des constantes                 */
+/**********************************************************/
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <termios.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/**
+ * \def TAILLE 
+ * @brief taille maximale du serpent
+ */
+#define TAILLE 10
+
+/**
+ * \def TAILLE_MINI 
+ * @brief minimum de ligne pour definir les coordonées du serpent choisis par l'utilisateur
+ */
+#define TAILLE_MINI 1
+
+/**
+ * \def TAILLE_MINI 
+ * @brief maximum de ligne pour definir les coordonées du serpent choisis par l'utilisateur
+ */
+#define TAILLE_MAX 40
+
+/**
+ * \def TETE
+ * @brief caractère defini pour la tête du serpent
+ */
+#define TETE 'O'
+
+/**
+ * \def CORPS
+ * @brief caractère defini pour le corps du serpent
+ */
+#define CORPS 'X'
+
+/**
+ * \def tab[TAILLE]
+ * @brief déclaration du tableau de taille 10 pour créer et faire bouger le serpent
+ */
+const int tab[TAILLE];
+
+/**********************************************************/
+/*            Déclarations des procédures                 */
+/**********************************************************/
+
+/**
+* \fn void gotoXY(int x, int y)
+* @brief procédure qui positionne le curseur dans le terminal
+* \param x: coordonnée x du curseur
+* \param y: coordonnée y du curseur
+*
+* Positionne le curseur dans le terminal à la position (x, y)
+*/
+void gotoXY(int x, int y) { 
+    printf("\033[%d;%df", y, x);
+}
+
+/**
+* \fn void afficher(int x, int y, char c)
+* @brief procédure qui positionne le curseur à un endroit précis (avant l’affichage d’un caractère)
+* \param x: coordonnée x du caractère à afficher
+* \param y: coordonnée y du caractère à afficher
+* \param c: caractère à afficher
+* 
+* affiche le caractère c à la position (x, y), où x est le numéro de colonne et y le numéro de ligne
+*/
+void afficher(int x, int y, char c) {
+    gotoXY(x, y);
+    printf("%c", c); 
+}
+
+/**
+* \fn void effacer(int x, int y, char c)
+* @brief procédure qui efface un caractère dans le terminal
+* \param x : coordonnée x du caractère à effacer
+* \param y : coordonnée y du caractère à effacer
+*
+* affiche un espace à la position (x, y), où x représente le numéro de colonne et y le numéro de ligne
+*/
+void effacer(int x, int y) {
+    gotoXY(x, y);
+    printf(" ");
+}
+
+/* dessine la tête et le corps */
+
+/**
+* \fn void dessinerSerpent(int lesX[], int lesY[])
+* @brief procédure qui dessine le serpent dans le terminal
+* \param lesX : tableau des coordonnées x du serpent
+* \param lesY : tableau des coordonnées y du serpent
+*
+* Affiche le serpent dans le terminal à partir des coordonnées dans les tableaux lesX et lesY, 'O' pour la tête et 'X' pour le corps
+*/ 
+void dessinerSerpent(int lesX[], int lesY[]) {
+    
+    afficher(lesX[0], lesY[0], TETE); // Dessine la tête
+    
+    /*Dessine le corps*/ 
+    for (int i = 1; i < TAILLE; i++) {
+        afficher(lesX[i], lesY[i], CORPS);
+    }
+}
+
+/**
+ * \fn kbhit()
+ * @brief fonction qui retourne 1 si un caractère est présent, 0 sinon
+ * \return int 
+ * 
+ *  Cette fonction teste s’il y a eu frappe d’un caractère au clavier et retourne 1 si c’est le cas et 0 sinon
+ */
+int kbhit() {
+    int unCaractere = 0;
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
+
+    // met le terminal en mode non bloquant
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+ 
+    ch = getchar();
+
+    // restaure le mode du terminal
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+ 
+    if (ch != EOF) {
+        ungetc(ch, stdin);
+        unCaractere = 1;
+    } 
+    return unCaractere;
+    }
+
+  
+/**
+* \fn void progresser(int lesX[], int lesY[])
+* @brief procédure qui déplace le serpent dans le terminal
+* \param lesX : tableau des coordonnées x du serpent
+* \param lesY : tableau des coordonnées y du serpent
+*
+* déplace le serpent d'une position vers la droite pour chaque caractère 'O' et 'X' et efface le dernier segment du serpent
+*/
+void progresser(int lesX[], int lesY[]) {
+    // Efface le dernier segment du corps
+    effacer(lesX[TAILLE - 1], lesY[TAILLE - 1]);
+    
+    /*Décale chaque segment du corps vers l'avant*/ 
+    for (int i = TAILLE - 1; i > 0; i--) {
+        lesX[i] = lesX[i - 1];
+        lesY[i] = lesY[i - 1];
+    }
+
+    lesX[0] += 1;   // Avance la tête du serpent vers la droite
+
+    dessinerSerpent(lesX, lesY);    // Dessine le serpent à sa nouvelle position
+}
+
+/**********************************************************/
+/*                 Programme principal                    */
+/**********************************************************/
+
+/**
+ * \fn int main()
+ * @brief programme principal du jeu snake
+ *
+ * Le programme demande à l'utilisateur de saisir les coordonnées de départ du serpent dans le terminal
+ */
+int main() {
+    
+    int  x, y;
+    int lesX[TAILLE];   // Tableau pour les coordonnées x du serpent
+    int lesY[TAILLE];   // Tableau pour les coordonnées y du serpent
+
+    /*Demande à l'utilisateur de saisir les coordonnées initiales*/ 
+    printf("Entrez la coordonnée x de départ (entre %d et %d) : ", TAILLE_MINI, TAILLE_MAX);
+    scanf("%d", &x);
+    
+    while(x < TAILLE_MINI || x > TAILLE_MAX){
+        printf("coordonnées invalides !!\n");
+        printf("Entrez la coordonnée x de départ (entre %d et %d) : ", TAILLE_MINI, TAILLE_MAX);
+        scanf("%d", &x);
+    }
+    
+    printf("Entrez la coordonnée y de départ (entre %d et %d) : ", TAILLE_MINI, TAILLE_MAX);
+    scanf("%d", &y);
+    
+    while(y < TAILLE_MINI || y > TAILLE_MAX){
+        printf("coordonnées invalides !!\n");
+        printf("Entrez la coordonnée x de départ (entre %d et %d) : ", TAILLE_MINI, TAILLE_MAX);
+        scanf("%d", &y);
+    }
+
+    // Initialise les coordonnées du serpent
+    for (int i = 0; i < TAILLE; i++) {
+        lesX[i] = x - i;     // Positionne chaque segment à une position décalée en x
+        lesY[i] = y;         // Garde la même position y pour chaque segment
+    }
+    
+    system("clear");         // Efface le terminal
+    dessinerSerpent(lesX, lesY);
+
+    while (1) {
+
+        progresser(lesX, lesY); // Appele la fonction pour faire progresser le serpent
+
+        /* Vérifie si une touche a été pressée */ 
+        if (kbhit()) {
+            char c = getchar();      // Lis le caractère pressé
+            if (c == 'a') {          // Quitte si 'a' est pressé
+                break;
+            }
+        }
+
+        
+        usleep(100000);    // modifie la vitesse (pause de 100ms)
+    }
+
+    return 0;
+}
