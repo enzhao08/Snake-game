@@ -1,0 +1,610 @@
+/** 
+* \page Général 
+* \brief Programme pour jouer au jeu snake dans le terminal
+* \author ANNIC Enzo
+* \version 4.0
+* \date 24 novembre 2024
+*
+*
+**/
+
+/**********************************************************/
+/*            Déclarations des constantes                 */
+/**********************************************************/
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <termios.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <time.h>
+
+/**
+ * \def TAILLE 
+ * \brief taille maximale du serpent
+*/
+#define TAILLE 10
+
+/**
+ * \def LONGUEUR_MAX
+ * \brief taille maximale du serpent
+*/
+#define LONGUEUR_MAX 20
+
+/**
+ * \def TETE
+ * \brief caractère defini pour la tête du serpent
+ */
+#define TETE 'O'
+
+/**
+ * \def CORPS
+ * \brief caractère defini pour le corps du serpent
+ */
+#define CORPS 'X'
+
+/**
+ * \def QUITTER
+ * \brief caractère defini pour quitter l'execution du programme
+ */
+#define QUITTER 'a'
+
+/**
+ * \def TEMPO
+ * \brief temps qui défini la vitesse du serpent, 100000 = 100ms
+ */
+#define TEMPO 100000
+
+/**
+ * \def HAUT
+ * \brief caractère defini pour déplacer le serpent vers le haut
+ */
+#define HAUT 'z'
+
+/**
+ * \def GAUCHE
+ * \brief caractère defini pour déplacer le serpent vers la gauche
+ */
+#define GAUCHE 'q'
+
+/**
+ * \def BAS
+ * \brief caractère defini pour déplacer le serpent vers le bas
+ */
+#define BAS 's'
+
+/**
+ * \def DROITE
+ * \brief caractère defini pour déplacer le serpent vers la droite
+ */
+#define DROITE 'd'
+
+/**
+ * \def LARGEUR_BORDURE
+ * \brief Défini la largeur de la bordure du plateau
+ */
+#define LARGEUR_BORDURE 80
+
+/**
+ * \def HAUTEUR_BORDURE
+ * \brief Défini la hauteur de la bordure du plateau
+ */
+#define HAUTEUR_BORDURE 40
+
+/**
+ * \def POSITION_Y_TETE
+ * \brief Défini la position de la tête du serpent en y 
+ */
+#define POSITION_Y_TETE 20
+
+/**
+ * \def POSITION_X_TETE
+ * \brief Défini la position de la tête du serpent en x 
+ */
+#define POSITION_X_TETE 40
+
+/**
+ * \def BORDURE
+ * \brief Défini le caractère qui constituera la bordure du plateau
+ */
+#define BORDURE '#'
+
+/**
+ * \def ESPACE
+ * \brief Défini le caractère qui constituera l'intérieur du plateau
+ */
+#define ESPACE ' '
+
+/**
+ * \def TAILLE_PAVE
+ * \brief Défini la taille d'un pavé => 5 sur 5
+ */
+#define TAILLE_PAVE 5
+
+/**
+* \def NOMBRE_PAVE
+* \brief Défini le nombres de pavés constituant le plateau
+ */
+#define NOMBRE_PAVE 4
+
+/**
+* \def POMME
+* \brief Défini le caractère de la pomme qui est à afficher
+*/
+#define POMME '6'
+
+/**
+ * \def tab[TAILLE]
+ * \brief déclaration du tableau de taille 20 pour créer, faire bouger et augmenter la taille du serpent
+ */
+const int tab[TAILLE];
+
+char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE];
+int xPomme, yPomme;
+int longueurSerpent = TAILLE;
+
+/**********************************************************/
+/*  Déclarations des prototypes des procédures/fonctions  */
+/**********************************************************/
+
+void gotoXY(int x, int y);
+void afficher(int x, int y, char c);
+void effacer(int x, int y);
+void dessinerSerpent(int lesX[], int lesY[]);
+int kbhit();
+void progresser(int lesX[], int lesY[], char direction, bool *enCours, bool *pommeMangee);
+void disableEcho();
+void enableEcho();
+void initPlateau(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE]);
+void dessinerPlateau(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE], int lesX[], int lesY[]);
+void ajouterPomme(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE], int lesX[], int lesY[]);
+
+/**********************************************************/
+/*                 Programme principal                    */
+/**********************************************************/
+
+/**
+ * \fn int main()
+ * \brief programme principal du jeu snake
+ * \return int
+ *
+ * Le programme demande à l'utilisateur de saisir les coordonnées de départ du serpent dans le terminal
+ */
+int main() {
+    srand(time(NULL));
+    int lesX[LONGUEUR_MAX];   // Tableau pour les coordonnées x du serpent
+    int lesY[LONGUEUR_MAX];   // Tableau pour les coordonnées y du serpent
+    int pommesMangees = 0;
+    int vitesse = TEMPO;
+
+    // Initialisation du plateau et affichage
+    system("clear");    // Efface le terminal avant d'afficher le jeu
+    initPlateau(plateau);         // Initialise le plateau avec bordures                          
+    dessinerPlateau(plateau, lesX, lesY);     // Affiche le plateau dans le terminal
+    ajouterPomme(plateau, lesX, lesY);
+
+    char direction = DROITE;
+    bool enCours = true;  // Variable indiquant si le jeu est en cours
+    
+    lesX[0] = POSITION_X_TETE; // Position initiale x de la tête
+    lesY[0] = POSITION_Y_TETE; // Position initiale y de la tête
+
+    // Positionne chaque segment à gauche de la tête
+    for (int i = 1; i < longueurSerpent; i++) {
+        lesX[i] = lesX[i - 1] - 1; // Chaque segment est décalé d'une unité à gauche du précédent
+        lesY[i] = POSITION_Y_TETE;              // Garde la même position y pour chaque segment
+    }
+         
+    dessinerSerpent(lesX, lesY);
+    
+    disableEcho();
+    printf("\033[?25l");    //efface le curseur dès juste avant le début du programme
+
+    // Boucle principale avec condition d'arrêt explicite
+    while (enCours) {
+
+        // Efface le serpent avant de le déplacer
+        for (int i = 0; i < longueurSerpent; i++) {
+            effacer(lesX[i], lesY[i]);
+        }
+
+        bool pommeMangee = false;
+        progresser(lesX, lesY, direction, &enCours, &pommeMangee); // Fait progresser le serpent
+
+        if (pommeMangee == true) {
+            if (longueurSerpent < LONGUEUR_MAX) {
+                longueurSerpent++; // Allonge le serpent d'un caractère
+            }
+            ajouterPomme(plateau, lesX, lesY); // Génère une nouvelle pomme
+
+            // Affiche la nouvelle pomme
+            afficher(xPomme, yPomme, POMME);
+
+            vitesse -= 5000; // Accélère légèrement le serpent
+            pommesMangees++;
+        }
+
+        if(pommesMangees == 10){
+            printf("\033[?25h");
+            enableEcho();
+            printf("Bravo, vous avez mangé 10 pommes, vous avez gagné la partie !!!");
+            break;
+        }
+
+        // Redessine le serpent après déplacement
+        dessinerSerpent(lesX, lesY);
+
+        /* Vérifie si une touche a été pressée */ 
+        if (kbhit()) {
+            char c = getchar();      // Lis le caractère pressé
+            
+            // En fonction de la touche entrée par l'utilisateur, met à jour la direction du serpent
+        switch(c) {
+        case HAUT:                         // Si l'utilisateur appuie sur la touche HAUT
+        if (direction != BAS) {        // Vérifie que la direction actuelle n'est pas BAS
+            direction = HAUT;          // Change la direction vers HAUT si elle n'est pas opposée
+        }
+        break;
+
+        case BAS:                          // Si l'utilisateur appuie sur la touche BAS
+        if (direction != HAUT) {       // Vérifie que la direction actuelle n'est pas HAUT
+            direction = BAS;           
+        }
+        break;
+
+        case GAUCHE:                       // Si l'utilisateur appuie sur la touche GAUCHE
+        if (direction != DROITE) {     // Vérifie que la direction actuelle n'est pas DROITE
+            direction = GAUCHE;        
+        }
+        break;
+
+        case DROITE:                       // Si l'utilisateur appuie sur la touche DROITE
+        if (direction != GAUCHE) {     // Vérifie que la direction actuelle n'est pas GAUCHE
+            direction = DROITE;        
+        }
+        break;
+                case QUITTER:
+                    enCours = false; // Change l'état pour sortir de la boucle
+                    break;
+            }
+        }
+        usleep(vitesse);    // modifie la vitesse (pause de 100ms)
+    }
+
+    enableEcho();
+    printf("\033[?25h");    //réaffiche le curseur après l'arrêt du programme
+    return 0;
+    
+}  
+
+/**
+* \fn void gotoXY(int x, int y)
+* \brief procédure qui positionne le curseur dans le terminal
+* \param x: coordonnée x du curseur
+* \param y: coordonnée y du curseur
+*
+* Positionne le curseur dans le terminal à la position (x, y)
+*/
+void gotoXY(int x, int y) {
+    printf("\033[%d;%df", y + 1, x + 1);  // Ajouter +1 uniquement pour l'affichage
+}
+
+/**
+* \fn void afficher(int x, int y, char c)
+* \brief procédure qui positionne le curseur à un endroit précis (avant l’affichage d’un caractère)
+* \param x: coordonnée x du caractère à afficher
+* \param y: coordonnée y du caractère à afficher
+* \param c: caractère à afficher
+* 
+* affiche le caractère c à la position (x, y), où x est le numéro de colonne et y le numéro de ligne
+*/
+void afficher(int x, int y, char c) {
+    gotoXY(x, y);
+    printf("%c", c);
+    fflush(stdout); 
+}
+
+/**
+* \fn void effacer(int x, int y, char c)
+* \brief procédure qui efface un caractère dans le terminal
+* \param x : coordonnée x du caractère à effacer
+* \param y : coordonnée y du caractère à effacer
+*
+* affiche un espace à la position (x, y), où x représente le numéro de colonne et y le numéro de ligne
+*/
+void effacer(int x, int y) {
+    gotoXY(x, y);
+    printf(" ");
+    fflush(stdout);
+}
+
+/**
+* \fn void dessinerSerpent(int lesX[], int lesY[])
+* \brief procédure qui dessine le serpent dans le terminal
+* \param lesX : tableau des coordonnées x du serpent
+* \param lesY : tableau des coordonnées y du serpent
+*
+* Affiche le serpent dans le terminal à partir des coordonnées dans les tableaux lesX et lesY, 'O' pour la tête et 'X' pour le corps
+*/ 
+void dessinerSerpent(int lesX[], int lesY[]) {
+    
+    for (int i = 1; i < longueurSerpent; i++) {
+        afficher(lesX[i], lesY[i], CORPS);
+    }
+    afficher(lesX[0], lesY[0], TETE);
+}
+
+/**
+ * \fn kbhit()
+ * \brief fonction qui retourne 1 si un caractère est présent, 0 sinon
+ * \return int 
+ * 
+ *  Cette fonction teste s’il y a eu frappe d’un caractère au clavier et retourne 1 si c’est le cas et 0 sinon
+ */
+int kbhit() {
+    int unCaractere = 0;
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
+
+    // met le terminal en mode non bloquant
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+ 
+    ch = getchar();
+
+    // restaure le mode du terminal
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+ 
+    if (ch != EOF) {
+        ungetc(ch, stdin);
+        unCaractere = 1;
+    }
+    return unCaractere;
+}
+
+  
+/**
+* \fn void progresser(int lesX[], int lesY[], char direction, bool enCours)
+* \brief procédure qui déplace le serpent dans le terminal
+* \param lesX : tableau des coordonnées x du serpent
+* \param lesY : tableau des coordonnées y du serpent
+*
+* déplace le serpent d'une position vers la droite pour chaque caractère 'O' et 'X' et efface le dernier segment du serpent
+*/
+
+void progresser(int lesX[], int lesY[], char direction, bool *enCours, bool *pommeMangee) {
+    *pommeMangee = false;
+
+    // Décale chaque segment du corps
+    for (int i = longueurSerpent - 1; i > 0; i--) {
+        lesX[i] = lesX[i - 1];
+        lesY[i] = lesY[i - 1];
+    }
+
+    // Efface le dernier segment du corps
+    effacer(lesX[TAILLE - 1], lesY[TAILLE - 1]);
+
+    // En fonction de la direction du serpent, met à jour la position de la tête
+    switch(direction) {
+    case HAUT:         // Si direction = HAUT
+        lesY[0] -= 1;  // Déplace la tête du serpent d'une case vers le haut (diminue y)
+        break;
+        
+    case BAS:          // Si direction = BAS
+        lesY[0] += 1;  // Déplace la tête du serpent d'une case vers le bas (augmente y)
+        break;
+
+    case GAUCHE:       // Si direction = GAUCHE
+        lesX[0] -= 1;  // Déplace la tête du serpent d'une case vers la gauche (diminue x)
+        break;
+
+    case DROITE:       // Si direction = DROITE
+        lesX[0] += 1;  // Déplace la tête du serpent d'une case vers la droite (augmente x)
+        break;
+    }
+
+    // Vérifie si la tête du serpent mange la pomme
+    if (plateau[lesY[0]][lesX[0]] == POMME) {
+        *pommeMangee = true;
+        plateau[lesY[0]][lesX[0]] = ESPACE; // Efface la pomme mangée
+    }
+
+    // Gestion des téléportations via les trous
+    if (lesY[0] == 0 && plateau[0][lesX[0]] == ESPACE) {  // Sortie par le haut, le serpent est bien sur la première ligne
+        lesY[0] = HAUTEUR_BORDURE - 1;  // Réapparaît juste avant la dernière ligne
+    } else if (lesY[0] == HAUTEUR_BORDURE && plateau[HAUTEUR_BORDURE - 1][lesX[0]] == ESPACE) {  // Sortie par le bas
+        lesY[0] = 1;  // Réapparaît juste après le haut
+    } else if (lesX[0] == 0 && plateau[lesY[0]][0] == ESPACE) {  // Sortie par la gauche
+        lesX[0] = LARGEUR_BORDURE - 1;  // Réapparaît juste après la droite
+    } else if (lesX[0] == LARGEUR_BORDURE && plateau[lesY[0]][LARGEUR_BORDURE - 1] == ESPACE) {  // Sortie par la droite
+        lesX[0] = 0;  // Réapparaît juste après la gauche
+    }
+    
+    // Vérifie si le serpent heurte un mur ou un pavé
+    if (plateau[lesY[0]][lesX[0]] == BORDURE) {
+        printf("\033[?25h");
+        enableEcho();
+        printf("\nGame Over: Collision avec la bordure ou un pavé !\n");
+        *enCours = false;
+    }
+
+    // Vérifie si le serpent entre en collision avec lui-même
+    for (int i = 1; i < longueurSerpent; i++) {
+        if (lesX[0] == lesX[i] && lesY[0] == lesY[i]) {
+            printf("\033[?25h");
+            enableEcho();
+            printf("\nGame Over: Collision avec le corps du serpent !\n");
+            *enCours = false;
+        }
+    }    
+}
+
+/**
+ * \fn void disableEcho()
+ * \brief Désactive l'affichage des caractères saisis par l'utilisateur
+ */
+void disableEcho() {
+    struct termios tty;
+
+    // Obtenir les attributs du terminal
+    if (tcgetattr(STDIN_FILENO, &tty) == -1) {
+        perror("tcgetattr");
+        exit(EXIT_FAILURE);
+    }
+
+    // Desactiver le flag ECHO
+    tty.c_lflag &= ~ECHO;
+
+    // Appliquer les nouvelles configurations
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1) {
+        perror("tcsetattr");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * \fn void enableEcho()
+ * \brief Réactive l'affichage des caractères saisis par l'utilisateur
+ */
+void enableEcho() {
+    struct termios tty;
+
+    // Obtenir les attributs du terminal
+    if (tcgetattr(STDIN_FILENO, &tty) == -1) {
+        perror("tcgetattr");
+        exit(EXIT_FAILURE);
+    }
+
+    // Reactiver le flag ECHO
+    tty.c_lflag |= ECHO;
+
+    // Appliquer les nouvelles configurations
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) == -1) {
+        perror("tcsetattr");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * \fn void initPlateau(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE])
+ * \brief Initialise le plateau avec des bordures et des espaces
+ * \param plateau : tableau 2D représentant le plateau de jeu
+ *
+ * La fonction initialise le plateau en définissant des bordures en # et des espaces à l'intérieur.
+ */
+void initPlateau(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE]) {
+    for (int y = 0; y < HAUTEUR_BORDURE; y++) {
+        for (int x = 0; x < LARGEUR_BORDURE; x++) {
+            if (y == 0 || y == HAUTEUR_BORDURE-1 || x == 0 || x == LARGEUR_BORDURE-1) {
+                plateau[y][x] = BORDURE;  // Définir la bordure
+            } else {
+                plateau[y][x] = ESPACE;  // Remplir le centre avec des espaces
+            }
+        }
+    }
+
+    int trouHorizontal = LARGEUR_BORDURE / 2;
+    int trouVertical = HAUTEUR_BORDURE / 2;    
+
+    plateau[0][trouHorizontal] = ESPACE; //trou sur le bord supérieur
+    plateau[trouVertical][0] = ESPACE; //trou sur le bord gauche
+    plateau[HAUTEUR_BORDURE - 1][trouHorizontal] = ESPACE; //trou sur le bord inférieur
+    plateau[trouVertical][LARGEUR_BORDURE - 1] = ESPACE; //trou sur le bord droit
+}
+
+/**
+ * \fn void dessinerPlateau(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE])
+ * \brief Affiche le plateau dans le terminal
+ * \param plateau : tableau 2D représentant le plateau de jeu
+ *
+ * La fonction affiche le plateau de jeu dans le terminal.
+ */
+void dessinerPlateau(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE], int lesX[], int lesY[]) {
+    system("clear");
+
+    // Initialise le plateau avec des bordures
+    initPlateau(plateau);
+
+    // Insère les pavés de manière aléatoire
+    for (int p = 0; p < NOMBRE_PAVE; p++) {
+        bool positionValide = false;
+        while (!positionValide) {
+            int xPave = (rand() % (LARGEUR_BORDURE - TAILLE_PAVE - 4)) + 2; 
+            int yPave = (rand() % (HAUTEUR_BORDURE - TAILLE_PAVE - 4)) + 2;
+
+            positionValide = true;
+            
+            // Vérifie que le pavé ne chevauche pas le serpent
+            for (int i = 0; i < TAILLE; i++) {
+                if (xPave <= lesX[i] && lesX[i] < xPave + TAILLE_PAVE &&
+                    yPave <= lesY[i] && lesY[i] < yPave + TAILLE_PAVE) {
+                    positionValide = false;
+                    break;
+                }
+            }
+
+            // Place le pavé sur le plateau
+            for (int i = 0; i < TAILLE_PAVE; i++) {
+                for (int j = 0; j < TAILLE_PAVE; j++) {
+                    if ((yPave + i) < HAUTEUR_BORDURE && (xPave + j) < LARGEUR_BORDURE) {
+                         plateau[yPave + i][xPave + j] = BORDURE; // Marque correctement chaque case du pavé
+                    }
+                }
+            }
+        }
+    }
+
+    ajouterPomme(plateau, lesX, lesY);
+
+    // Affiche le plateau avec les pavés
+    for (int y = 0; y < HAUTEUR_BORDURE; y++) {
+        for (int x = 0; x < LARGEUR_BORDURE; x++) {
+            printf("%c", plateau[y][x]);
+        }
+        printf("\n");
+    }
+}
+
+
+/**
+ * \fn void ajouterPomme(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE], int lesX[], int lesY[])
+ * \brief Affiche une pomme aléatoirement dans la plateau
+ * \param plateau : tableau 2D représentant le plateau de jeu
+ *
+ * La fonction affiche le plateau de jeu dans le terminal.
+ */
+void ajouterPomme(char plateau[HAUTEUR_BORDURE][LARGEUR_BORDURE], int lesX[], int lesY[]) {
+    bool espaceValide = false;
+
+    while (!espaceValide) {
+        xPomme = rand() % (LARGEUR_BORDURE - 2) + 1;
+        yPomme = rand() % (HAUTEUR_BORDURE - 2) + 1;
+
+        espaceValide = true;
+        // Vérifie que la pomme n'est pas sur le serpent
+        for (int i = 0; i < longueurSerpent; i++) {
+            if (lesX[i] == xPomme && lesY[i] == yPomme) {
+                espaceValide = false;
+                printf("Collision avec le serpent à (%d, %d)\n", xPomme, yPomme);
+                break;
+            }
+        }
+
+        // Vérifie que la pomme n'est pas sur un pavé ou une bordure
+        if (plateau[yPomme][xPomme] == BORDURE) {
+            espaceValide = false;
+        }
+
+        // Si la position est valide, place la pomme
+        if (espaceValide) {
+            plateau[yPomme][xPomme] = POMME;
+        }
+    }
+}
